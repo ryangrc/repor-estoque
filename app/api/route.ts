@@ -1,19 +1,14 @@
-import { env } from 'cloudflare:workers';
 import { handle } from '@/server/api';
-import type { Database } from '@/server/database';
-import type { Config } from '@/server/security';
+import { getDatabase } from '@/server/turso';
 export const dynamic = 'force-dynamic';
-export function GET(request: Request) {
-  return handle(
-    request,
-    env.DB as unknown as Database,
-    env as unknown as Config,
-  );
+export const runtime = 'nodejs';
+function dispatch(request: Request) {
+  return handle(request, getDatabase(), {
+    APP_URL: process.env.APP_URL,
+    EMAIL_API_KEY: process.env.EMAIL_API_KEY,
+    EMAIL_FROM: process.env.EMAIL_FROM,
+    EMAIL_API_URL: process.env.EMAIL_API_URL,
+  });
 }
-export function POST(request: Request) {
-  return handle(
-    request,
-    env.DB as unknown as Database,
-    env as unknown as Config,
-  );
-}
+export const GET = dispatch;
+export const POST = dispatch;

@@ -2,7 +2,7 @@ import { registerHooks } from 'node:module';
 // Resolve project TypeScript imports without a separate bundler process (Node 24+).
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier.startsWith('.') && !/\.[cm]?[jt]sx?$/.test(specifier)) {
+    if (!context.parentURL?.includes('/node_modules/') && specifier.startsWith('.') && !/\.[cm]?[jt]sx?$/.test(specifier)) {
       try {
         return next(`${specifier}.ts`, context);
       } catch (error) {
@@ -12,3 +12,4 @@ registerHooks({
     return next(specifier, context);
   },
 });
+
