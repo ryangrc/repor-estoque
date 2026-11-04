@@ -374,6 +374,7 @@ void test('real backend: setup, CSRF, RBAC, audit, concurrency, shopping, import
   assert.equal(
     (
       await request('shopping.finish', {
+        listId: list.id,
         date: '2026-09-08',
         note: 'Teste de finalização',
       })
@@ -383,11 +384,18 @@ void test('real backend: setup, CSRF, RBAC, audit, concurrency, shopping, import
   state = (await request()).body as unknown as State;
   assert.equal(
     state.products.find((p) => p.id === item.productId)!.quantity,
-    stockBefore,
+    stockBefore + 3,
   );
+  assert.equal(state.lists.find((l) => l.id === list.id)!.items[0].received, 1);
   assert.equal(
-    (await request('shopping.receive', { id: item.id })).response.status,
-    200,
+    (
+      await request('shopping.finish', {
+        listId: list.id,
+        date: '2026-09-08',
+        note: '',
+      })
+    ).response.status,
+    409,
   );
   assert.equal(
     (await request('shopping.receive', { id: item.id })).response.status,

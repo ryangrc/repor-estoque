@@ -40,6 +40,12 @@ Os testes usam bancos temporários e não alteram o banco online. Cobrem autenti
 
 ## Acesso
 
+## Confirmação de compra
+
+Marque os itens comprados e use **Finalizar compra** após conferir o recebimento. A confirmação soma as quantidades ao estoque, registra as movimentações e marca a entrada na mesma transação. Itens não comprados passam para a próxima lista. Repetir a confirmação não duplica a entrada. Compras antigas finalizadas sem entrada continuam com **Registrar entrada**.
+
+## Acesso
+
 Use o endereço de produção gerado pela Vercel. O domínio personalizado é opcional. Os planos gratuitos possuem cotas; ultrapassá-las pode interromper o serviço.
 
 Nunca publique `.env*`, tokens, senhas ou cópias do banco. Compartilhar o código não compartilha automaticamente o acesso ao estoque.

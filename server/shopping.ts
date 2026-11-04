@@ -266,6 +266,11 @@ export async function shoppingAction(
   }
   if (action === 'shopping.finish') {
     admin(user);
+    ensure(
+      b.listId === listId,
+      'Esta lista mudou ou já foi finalizada. Atualize a página.',
+      409,
+    );
     const items = await listItems(db, listId);
     ensure(
       items.some((i) => i.purchased),
@@ -277,12 +282,55 @@ export async function shoppingAction(
       'Data inválida.',
     );
     const newId = id();
+    const receipts: Statement[] = [];
+    for (const item of items.filter((i) => i.purchased)) {
+      const product = await findProduct(db, item.productId);
+      receipts.push(
+        guard(
+          db,
+          'EXISTS(SELECT 1 FROM products WHERE id=? AND revision=?)',
+          product.id,
+          product.revision,
+        ),
+        ...movement(
+          db,
+          user,
+          product,
+          number(product.quantity + item.quantity, 'Novo estoque'),
+          'Entrada de compra',
+          item.note,
+        ),
+        query(
+          db,
+          'UPDATE shoppingListItems SET received=1,revision=revision+1 WHERE id=?',
+          item.id,
+        ),
+      );
+    }
     await db.batch([
       guard(
         db,
         "EXISTS(SELECT 1 FROM shoppingLists WHERE id=? AND status='open')",
         listId,
       ),
+      // Check the complete snapshot before any stock movement, including edits
+      // and additions made while the confirmation was being processed.
+      guard(
+        db,
+        '(SELECT COUNT(*) FROM shoppingListItems WHERE listId=?)=?',
+        listId,
+        items.length,
+      ),
+      ...items.map((item) =>
+        guard(
+          db,
+          'EXISTS(SELECT 1 FROM shoppingListItems WHERE id=? AND listId=? AND revision=?)',
+          item.id,
+          listId,
+          item.revision,
+        ),
+      ),
+      ...receipts,
       query(
         db,
         "UPDATE shoppingLists SET status='completed',finalizedAt=?,finalizedBy=?,note=? WHERE id=?",

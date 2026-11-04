@@ -49,7 +49,8 @@ export function ShoppingView({
   importFile: (f: File) => void;
 }) {
   const [q, setQ] = useState('');
-  const items = state.lists.find((l) => l.status === 'open')?.items || [],
+  const currentList = state.lists.find((l) => l.status === 'open');
+  const items = currentList?.items || [],
     completed = state.lists.filter((l) => l.status === 'completed'),
     admin = state.user.role === 'admin';
   return (
@@ -123,7 +124,7 @@ export function ShoppingView({
               onClick={() =>
                 ask(
                   'Limpar itens comprados?',
-                  'Os itens marcados serão removidos desta lista. Para guardar a compra e registrar a entrada depois, use Finalizar compra.',
+                  'Os itens marcados serão removidos desta lista. Para guardar a compra e somar ao estoque, use Finalizar compra.',
                   () => mutate('shopping.clear'),
                 )
               }
@@ -216,23 +217,23 @@ export function ShoppingView({
         <div className="list-footer">
           <p>
             <ShieldCheck size={17} />
-            Finalizar a compra não altera o estoque.
+            Confirmar a compra soma os itens comprados ao estoque.
           </p>
           {admin && (
             <button
               className="btn primary"
-              disabled={!items.some((i) => i.purchased)}
+              disabled={busy || !items.some((i) => i.purchased)}
               onClick={() =>
                 open(
                   'Finalizar compra',
-                  'Os itens não comprados continuarão na próxima lista. A entrada física será registrada separadamente.',
+                  'Confirme que os produtos chegaram. Os itens comprados serão somados ao estoque; os demais continuarão na próxima lista.',
                   <Form
                     label="Finalizar compra"
                     save={async (b) => {
                       await mutate(
                         'shopping.finish',
-                        b,
-                        'Compra finalizada. Registre a entrada quando os itens chegarem.',
+                        { ...b, listId: currentList?.id },
+                        'Compra confirmada e estoque atualizado.',
                       );
                       close();
                     }}
@@ -266,7 +267,7 @@ export function ShoppingView({
           <div className="panel-title">
             <h2>Compras finalizadas</h2>
             <span className="helper">
-              Registre a entrada após receber os produtos
+              Entradas registradas e compras anteriores pendentes
             </span>
           </div>
           {completed.map((l) => (
