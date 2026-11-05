@@ -5,6 +5,7 @@ import {
   real,
   uniqueIndex,
   index,
+  check,
 } from 'drizzle-orm/sqlite-core';
 export const roles = sqliteTable('roles', { name: text().primaryKey() });
 export const users = sqliteTable('users', {
@@ -143,18 +144,27 @@ export const auditLogs = sqliteTable('auditLogs', {
   createdAt: text().notNull(),
 });
 import { sql } from 'drizzle-orm';
-export const invitations = sqliteTable('invitations', {
-  hash: text().primaryKey(),
-  userId: text()
-    .notNull()
-    .unique()
-    .references(() => users.id),
-  createdBy: text()
-    .notNull()
-    .references(() => users.id),
-  createdAt: text().notNull(),
-  expiresAt: integer().notNull(),
-  usedAt: text(),
-  delivery: text().notNull().default('pending'),
-  providerId: text(),
-});
+export const invitations = sqliteTable(
+  'invitations',
+  {
+    hash: text().primaryKey(),
+    userId: text()
+      .notNull()
+      .unique()
+      .references(() => users.id),
+    createdBy: text()
+      .notNull()
+      .references(() => users.id),
+    createdAt: text().notNull(),
+    expiresAt: integer().notNull(),
+    usedAt: text(),
+    delivery: text().notNull().default('pending'),
+    providerId: text(),
+  },
+  (t) => [
+    check(
+      'invitations_delivery',
+      sql`${t.delivery} IN ('pending','accepted','failed')`,
+    ),
+  ],
+);

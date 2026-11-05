@@ -8,6 +8,13 @@
       "when": 1788874493972,
       "tag": "0000_melodic_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793884051042,
+      "tag": "0001_account_invitations",
+      "breakpoints": true
     }
   ]
 }
