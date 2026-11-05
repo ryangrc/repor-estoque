@@ -165,18 +165,23 @@ export default function App() {
     setError('');
   }
   useEffect(() => {
-    const params = new URLSearchParams(location.hash.slice(1));
-    const activation = params.get('activate');
-    const t = activation ? `activate:${activation}` : params.get('reset');
-    if (t) {
-      queueMicrotask(() => setToken(t));
-      history.replaceState(null, '', location.pathname);
+    function readAccountLink() {
+      const params = new URLSearchParams(location.hash.slice(1));
+      const activation = params.get('activate');
+      const t = activation ? `activate:${activation}` : params.get('reset');
+      if (t) {
+        queueMicrotask(() => setToken(t));
+        history.replaceState(null, '', location.pathname);
+      }
     }
+    readAccountLink();
+    window.addEventListener('hashchange', readAccountLink);
     void Promise.resolve()
       .then(refresh)
       .catch((e) => setError(e.message));
     if ('serviceWorker' in navigator)
       navigator.serviceWorker.register('/sw.js').catch(() => {});
+    return () => window.removeEventListener('hashchange', readAccountLink);
   }, []);
   useEffect(() => {
     if (!notice) return;
