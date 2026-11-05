@@ -1,20 +1,11 @@
-import {
-  admin,
-  email,
-  ensure,
-  strongPassword,
-  text,
-  type User,
-} from '../lib/domain';
+import { admin, email, ensure, text, type User } from '../lib/domain';
+
 import { audit, guard, id, now, query, type Database } from './database';
-import {
-  issueToken,
-  mailConfigured,
-  publicUser,
-  passwordHash,
-  digest,
-  type Config,
-} from './security';
+
+import { publicUser, type Config } from './security';
+
+import { invite } from './invitations';
+
 export async function usersAction(
   db: Database,
   c: Config,
@@ -23,128 +14,129 @@ export async function usersAction(
   b: Record<string, unknown>,
 ) {
   if (!action.startsWith('user.')) return false;
+
   admin(user);
+
   ensure(
     ['user.create', 'user.invite', 'user.update', 'user.resend'].includes(
       action,
     ),
     'Ação inválida.',
   );
-  if (action === 'user.invite' || action === 'user.create') {
-    const direct = action === 'user.create';
-    let encoded: string | null = null;
-    if (direct) {
-      const password = strongPassword(b.password);
-      ensure(password === b.confirm, 'As senhas não coincidem.');
-      encoded = await passwordHash(password);
-    } else
-      ensure(
-        mailConfigured(c),
-        'Configure o serviço de e-mail antes de convidar usuários.',
-        503,
-      );
-    const address = email(b.email),
-      name = text(b.name, 'Nome', 100),
-      job = text(b.job, 'Cargo', 100, true);
-    ensure(b.role === 'admin' || b.role === 'collaborator', 'Função inválida.');
+
+  ensure(
+    !b.password && !b.confirm,
+    'A senha deve ser definida pelo próprio usuário no convite.',
+  );
+
+  if (action === 'user.create' || action === 'user.invite') {
+    const name = text(b.name, 'Nome completo', 100),
+      address = email(b.email),
+      phone = text(b.phone, 'Telefone', 30);
+
+    ensure(/^[+()\d\s.-]{7,30}$/.test(phone), 'Informe um telefone válido.');
+
+    ensure(b.role === 'admin' || b.role === 'collaborator', 'Perfil inválido.');
+
     const uid = id();
+
     await db.batch([
       query(
         db,
-        'INSERT INTO users (id,name,email,role,job,createdAt,passwordHash) VALUES (?,?,?,?,?,?,?)',
+        'INSERT INTO users(id,name,email,phone,role,job,createdAt) VALUES (?,?,?,?,?,?,?)',
         uid,
         name,
         address,
+        phone,
         b.role,
-        job,
+        text(b.job ?? '', 'Cargo', 100, true),
         now(),
-        encoded,
       ),
-      audit(
-        db,
-        user.id,
-        direct ? 'Usuário criado' : 'Usuário convidado',
-        name,
-        null,
-        { role: b.role },
-      ),
+
+      audit(db, user.id, 'Conta pendente cadastrada', uid, null, {
+        role: b.role,
+      }),
     ]);
-    if (direct) return true;
-    const invited = await query(
+
+    const target = await query(
       db,
       `SELECT ${publicUser} FROM users WHERE id=?`,
       uid,
     ).first<User>();
-    await issueToken(db, c, invited!, 'invite');
-    return true;
+
+    return invite(db, c, target!, user);
   }
+
   const target = await query(
     db,
     `SELECT ${publicUser} FROM users WHERE id=?`,
     text(b.id, 'Usuário'),
   ).first<User>();
+
   ensure(target, 'Usuário não encontrado.', 404);
-  if (action === 'user.resend') {
-    ensure(target.active, 'Reative a conta antes de convidar.');
-    await issueToken(db, c, target, 'invite');
-    await audit(db, user.id, 'Convite reenviado', target.name).run();
-    return true;
-  }
+
+  if (action === 'user.resend') return invite(db, c, target, user);
+
   ensure(target.id !== user.id, 'Altere sua própria conta em Configurações.');
-  ensure(b.role === 'admin' || b.role === 'collaborator', 'Função inválida.');
+
+  ensure(b.role === 'admin' || b.role === 'collaborator', 'Perfil inválido.');
+
   ensure(
     typeof b.active === 'boolean' && typeof b.canUpdateStock === 'boolean',
     'Permissões inválidas.',
   );
+
   const name = text(b.name, 'Nome', 100),
-    address = email(b.email),
-    job = text(b.job, 'Cargo', 100, true);
-  let encoded: string | null = null;
-  if (b.password !== undefined && b.password !== '') {
-    const password = strongPassword(b.password);
-    ensure(password === b.confirm, 'As senhas não coincidem.');
-    encoded = await passwordHash(password);
-  } else ensure(!b.confirm, 'Preencha a nova senha.');
+    phone = text(b.phone ?? target.phone, 'Telefone', 30, true),
+    job = text(b.job ?? '', 'Cargo', 100, true);
+
+  // An administrator cannot take over an activated account by changing its email.
+
+  ensure(
+    email(b.email) === target.email,
+    'O e-mail de acesso não pode ser alterado nesta tela.',
+  );
+
   await db.batch([
     query(
       db,
-      'UPDATE users SET name=?,email=?,job=?,role=?,active=?,canUpdateStock=?,passwordHash=COALESCE(?,passwordHash) WHERE id=?',
+      'UPDATE users SET name=?,phone=?,job=?,role=?,active=?,canUpdateStock=? WHERE id=?',
       name,
-      address,
+      phone,
       job,
       b.role,
       b.active ? 1 : 0,
       b.canUpdateStock ? 1 : 0,
-      encoded,
       target.id,
     ),
-    guard(db, "EXISTS(SELECT 1 FROM users WHERE role='admin' AND active=1)"),
+
+    guard(
+      db,
+      "EXISTS(SELECT 1 FROM users WHERE role='admin' AND active=1 AND passwordHash IS NOT NULL)",
+    ),
+
     query(db, 'DELETE FROM sessions WHERE userId=?', target.id),
+
     query(db, 'DELETE FROM passwordResetTokens WHERE userId=?', target.id),
-    ...(encoded
-      ? [
-          query(
-            db,
-            'DELETE FROM limits WHERE key IN (?,?)',
-            `login:${await digest(target.email)}`,
-            `login:${await digest(address)}`,
-          ),
-          audit(
-            db,
-            user.id,
-            'Senha redefinida pelo administrador',
-            target.name,
-          ),
-        ]
-      : []),
-    audit(db, user.id, 'Usuário atualizado', target.name, target, {
-      name,
-      email: address,
-      job,
-      role: b.role,
-      active: b.active,
-      canUpdateStock: b.canUpdateStock,
-    }),
+
+    query(
+      db,
+      'UPDATE invitations SET expiresAt=0 WHERE userId=? AND usedAt IS NULL',
+      target.id,
+    ),
+
+    audit(
+      db,
+      user.id,
+      'Acesso do usuário atualizado',
+      target.id,
+      { role: target.role, active: target.active },
+      { role: b.role, active: b.active },
+    ),
   ]);
-  return true;
+
+  return {
+    ok: true,
+    message: 'Usuário atualizado. Se estava pendente, reenvie o convite.',
+  };
 }

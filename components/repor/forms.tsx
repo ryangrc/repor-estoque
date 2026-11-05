@@ -1,12 +1,9 @@
 'use client';
 import { useState, type ReactNode } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Field, Pick, Submit } from './ui';
 import {
   units,
-  strongPassword,
-  ensure,
   type Product,
   type State,
   type User,
@@ -267,16 +264,11 @@ export function UserForm({
 }) {
   const [role, setRole] = useState(u?.role || 'collaborator'),
     [active, setActive] = useState(u ? !!u.active : true),
-    [stock, setStock] = useState(u ? !!u.canUpdateStock : true),
-    [showPassword, setShowPassword] = useState(false);
+    [stock, setStock] = useState(u ? !!u.canUpdateStock : true);
   return (
     <Form
       label={u ? 'Salvar alterações' : 'Criar usuário'}
       save={async (b) => {
-        if (!u || b.password || b.confirm) {
-          strongPassword(b.password);
-          ensure(b.password === b.confirm, 'As senhas não coincidem.');
-        }
         await save({ ...b, id: u?.id, role, active, canUpdateStock: stock });
       }}
     >
@@ -290,50 +282,25 @@ export function UserForm({
           required
           maxLength={254}
           defaultValue={u?.email}
+          readOnly={!!u}
         />
       </Field>
       <Field label="Cargo (opcional)">
         <input name="job" maxLength={100} defaultValue={u?.job} />
       </Field>
-      <Field label={u ? 'Nova senha (opcional)' : 'Senha'}>
-        <div className="password-input">
-          <input
-            name="password"
-            type={showPassword ? 'text' : 'password'}
-            autoComplete="new-password"
-            required={!u}
-            minLength={10}
-            maxLength={72}
-            placeholder={
-              u
-                ? 'Deixe em branco para manter a senha'
-                : 'Defina a senha de acesso'
-            }
-          />
-          <button
-            type="button"
-            aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-            aria-pressed={showPassword}
-            onClick={() => setShowPassword(!showPassword)}
-          >
-            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-          </button>
-        </div>
-      </Field>
-      <Field label="Confirmar senha">
+      <Field label="Telefone">
         <input
-          name="confirm"
-          type={showPassword ? 'text' : 'password'}
-          autoComplete="new-password"
+          name="phone"
+          type="tel"
           required={!u}
-          minLength={10}
-          maxLength={72}
+          maxLength={30}
+          defaultValue={u?.phone}
+          autoComplete="tel"
         />
       </Field>
       <p className="helper">
-        Use pelo menos 10 caracteres, com maiúscula, minúscula, número e
-        símbolo. O olho mostra apenas a senha digitada neste formulário. Senhas
-        salvas não podem ser consultadas.
+        A pessoa receberá um convite válido por 24 horas e criará a própria
+        senha. O administrador não define nem consulta senhas.
       </p>
       <Field label="Nível de acesso">
         <Pick
@@ -341,7 +308,7 @@ export function UserForm({
           onChange={(v) => setRole(v as User['role'])}
           label="Nível de acesso"
           options={[
-            { value: 'collaborator', label: 'Colaborador' },
+            { value: 'collaborator', label: 'Operador' },
             { value: 'admin', label: 'Administrador' },
           ]}
         />
@@ -350,7 +317,7 @@ export function UserForm({
         <>
           <label className="check-label">
             <Checkbox checked={active} onCheckedChange={setActive} />
-            Conta ativa
+            Acesso desbloqueado (contas pendentes ainda precisam de ativação)
           </label>
           <label className="check-label">
             <Checkbox checked={stock} onCheckedChange={setStock} />

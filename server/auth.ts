@@ -1,3 +1,4 @@
+import { activation } from './invitations';
 import { email, strongPassword, text, ensure, type User } from '../lib/domain';
 import { audit, guard, id, now, query, type Database } from './database';
 import {
@@ -21,6 +22,8 @@ export async function authAction(
   const secure = new URL(req.url).protocol === 'https:';
   const ip = await digest(req.headers.get('cf-connecting-ip') || 'local');
   await throttle(db, `auth:${ip}`, 60);
+  if (action === 'activate' || action === 'activation.check')
+    return activation(db, action, b);
   if (action === 'setup') {
     ensure(
       !(await query(db, 'SELECT id FROM setup LIMIT 1').first()),
@@ -80,7 +83,7 @@ export async function authAction(
     await throttle(db, key, 5);
     const user = await query(
       db,
-      'SELECT * FROM users WHERE email=? AND active=1',
+      'SELECT * FROM users WHERE email=? AND active=1 AND passwordHash IS NOT NULL',
       address,
     ).first<User & { passwordHash: string }>();
     const dummy = await passwordHash('a' + ip + 'Z!');
@@ -110,7 +113,7 @@ export async function authAction(
     await throttle(db, `reset:${await digest(address)}`, 3);
     const user = await query(
       db,
-      `SELECT ${publicUser} FROM users WHERE email=? AND active=1`,
+      `SELECT ${publicUser} FROM users WHERE email=? AND active=1 AND passwordHash IS NOT NULL`,
       address,
     ).first<User>();
     if (user && mailConfigured(config)) {
@@ -134,7 +137,7 @@ export async function authAction(
     const tokenHash = await digest(token);
     const row = await query(
       db,
-      'SELECT t.userId,u.email FROM passwordResetTokens t JOIN users u ON u.id=t.userId WHERE t.hash=? AND t.expiresAt>? AND u.active=1',
+      `SELECT t.userId,u.email FROM passwordResetTokens t JOIN users u ON u.id=t.userId WHERE t.hash=? AND t.expiresAt>? AND t.kind='reset' AND u.active=1 AND u.passwordHash IS NOT NULL`,
       tokenHash,
       Date.now(),
     ).first<{ userId: string; email: string }>();
@@ -143,7 +146,7 @@ export async function authAction(
     await db.batch([
       guard(
         db,
-        'EXISTS(SELECT 1 FROM passwordResetTokens WHERE hash=? AND expiresAt>?)',
+        `EXISTS(SELECT 1 FROM passwordResetTokens t JOIN users u ON u.id=t.userId WHERE t.hash=? AND t.expiresAt>? AND t.kind='reset' AND u.active=1 AND u.passwordHash IS NOT NULL)`,
         tokenHash,
         Date.now(),
       ),

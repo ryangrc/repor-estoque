@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ShieldCheck,
   ArrowLeft,
@@ -26,12 +26,21 @@ export function AuthScreen({
   ) => Promise<Record<string, unknown>>;
   refresh: () => Promise<void>;
 }) {
+  const activating = token.startsWith('activate:');
+  const rawToken = activating ? token.slice(9) : token;
+  const [checked, setChecked] = useState(false);
   const [mode, setMode] = useState(token ? 'reset' : setup ? 'setup' : 'login'),
     [error, setError] = useState(''),
     [message, setMessage] = useState(''),
     [busy, setBusy] = useState(false),
     [password, setPassword] = useState(''),
     [show, setShow] = useState(false);
+  useEffect(() => {
+    if (!activating) return;
+    void post('activation.check', { token: rawToken })
+      .then(() => setChecked(true))
+      .catch((e) => setError(e.message));
+  }, [activating, rawToken, post]);
   const rules = [
     password.length >= 10,
     /[A-Z]/.test(password),
@@ -95,7 +104,9 @@ export function AuthScreen({
               : mode === 'forgot'
                 ? 'Esqueceu sua senha?'
                 : mode === 'reset'
-                  ? 'Defina sua nova senha.'
+                  ? activating
+                    ? 'Ative sua conta no PJ Estoque.'
+                    : 'Defina sua nova senha.'
                   : 'Bom ter você de volta.'}
           </h2>
           <p>
@@ -122,7 +133,10 @@ export function AuthScreen({
                     'As senhas não coincidem.',
                   );
                 }
-                const result = await post(mode, { ...data, token });
+                const result = await post(
+                  mode === 'reset' && activating ? 'activate' : mode,
+                  { ...data, token: rawToken },
+                );
                 if (mode === 'login' || mode === 'setup') await refresh();
                 else {
                   setMessage(
@@ -254,13 +268,16 @@ export function AuthScreen({
             )}
             <Submit
               busy={busy}
+              disabled={mode === 'reset' && activating && !checked}
               label={
                 mode === 'setup'
                   ? 'Criar conta e começar'
                   : mode === 'forgot'
                     ? 'Enviar instruções'
                     : mode === 'reset'
-                      ? 'Redefinir senha'
+                      ? activating
+                        ? 'Ativar conta'
+                        : 'Redefinir senha'
                       : 'Entrar'
               }
             />

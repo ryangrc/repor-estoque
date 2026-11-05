@@ -13,7 +13,7 @@
     "format": "oxfmt",
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-transform-types --import ./tests/register.mjs --test tests/critical.test.ts tests/turso.test.ts",
+    "test": "node --experimental-transform-types --import ./tests/register.mjs --test tests/critical.test.ts tests/turso.test.ts tests/invitations.test.ts",
     "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate-turso.mjs"
   },
   "dependencies": {

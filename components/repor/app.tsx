@@ -140,9 +140,9 @@ export default function App() {
     data: Record<string, unknown> = {},
     message = 'Alterações salvas.',
   ) {
-    await post(action, data);
+    const result = await post(action, data);
     await refresh();
-    setNotice(message);
+    setNotice(typeof result.message === 'string' ? result.message : message);
   }
   async function quick(
     action: string,
@@ -165,7 +165,9 @@ export default function App() {
     setError('');
   }
   useEffect(() => {
-    const t = new URLSearchParams(location.hash.slice(1)).get('reset');
+    const params = new URLSearchParams(location.hash.slice(1));
+    const activation = params.get('activate');
+    const t = activation ? `activate:${activation}` : params.get('reset');
     if (t) {
       queueMicrotask(() => setToken(t));
       history.replaceState(null, '', location.pathname);
@@ -289,16 +291,14 @@ export default function App() {
       u ? 'Editar usuário' : 'Criar usuário',
       u
         ? 'Gerencie o acesso e os dados da conta.'
-        : 'Defina os dados e a senha para a pessoa acessar o sistema.',
+        : 'Cadastre os dados para enviar um convite de ativação.',
       <UserForm
         user={u}
         save={async (b) => {
           await mutate(
             u ? 'user.update' : 'user.create',
             b,
-            u
-              ? 'Usuário atualizado.'
-              : 'Usuário criado. Já pode entrar com a senha definida.',
+            u ? 'Usuário atualizado.' : 'Conta pendente cadastrada.',
           );
           close();
         }}
@@ -350,7 +350,7 @@ export default function App() {
       );
     }
   }
-  if (auth || (token && !state))
+  if (auth || token)
     return (
       <AuthScreen
         key={`${auth?.setup}-${token}`}

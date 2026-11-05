@@ -17,6 +17,7 @@ export const users = sqliteTable('users', {
     .references(() => roles.name),
   active: integer().notNull().default(1),
   job: text().notNull().default(''),
+  phone: text().notNull().default(''),
   canUpdateStock: integer().notNull().default(1),
   createdAt: text().notNull(),
 });
@@ -142,3 +143,18 @@ export const auditLogs = sqliteTable('auditLogs', {
   createdAt: text().notNull(),
 });
 import { sql } from 'drizzle-orm';
+export const invitations = sqliteTable('invitations', {
+  hash: text().primaryKey(),
+  userId: text()
+    .notNull()
+    .unique()
+    .references(() => users.id),
+  createdBy: text()
+    .notNull()
+    .references(() => users.id),
+  createdAt: text().notNull(),
+  expiresAt: integer().notNull(),
+  usedAt: text(),
+  delivery: text().notNull().default('pending'),
+  providerId: text(),
+});

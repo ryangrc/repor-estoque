@@ -15,180 +15,6 @@ import { testDatabase } from './database';
 import { digest } from '../server/security';
 import { downloadList } from '../server/export';
 const password = () => `${crypto.randomUUID()}Aa1!`;
-void test('admin creates and resets credentials without email; secrets stay private and collaborators are denied', async () => {
-  const { db, sqlite } = testDatabase();
-  let cookie = '',
-    csrf = '';
-  async function request(action?: string, data: Record<string, unknown> = {}) {
-    const response = await handle(
-      new Request('https://repor.test/api', {
-        method: action ? 'POST' : 'GET',
-        headers: {
-          origin: 'https://repor.test',
-          'content-type': 'application/json',
-          cookie,
-          'x-csrf-token': csrf,
-        },
-        body: action ? JSON.stringify({ action, ...data }) : undefined,
-      }),
-      db,
-      {},
-    );
-    return {
-      response,
-      body: (await response.json()) as Record<string, unknown>,
-    };
-  }
-  try {
-    const initial = password();
-    const setup = await request('setup', {
-      name: 'Admin',
-      email: 'owner@example.test',
-      password: initial,
-      confirm: initial,
-    });
-    cookie = setup.response.headers.get('set-cookie')!.split(';')[0];
-    csrf = setup.body.csrf as string;
-    const adminCookie = cookie,
-      adminCsrf = csrf;
-    for (const role of ['admin', 'collaborator']) {
-      const secret = password();
-      const data = {
-        name: role,
-        email: `${role}@example.test`,
-        job: '',
-        role,
-        password: secret,
-        confirm: secret,
-      };
-      assert.equal(
-        (
-          await request('user.create', {
-            ...data,
-            password: 'weak',
-            confirm: 'weak',
-          })
-        ).response.status,
-        400,
-      );
-      assert.equal(
-        (await request('user.create', { ...data, confirm: 'mismatch' }))
-          .response.status,
-        400,
-      );
-      assert.equal((await request('user.create', data)).response.status, 200);
-      const state = (await request()).body as unknown as State;
-      const target = state.users.find((u) => u.email === data.email)!;
-      const encoded = sqlite
-        .prepare('SELECT passwordHash FROM users WHERE id=?')
-        .get(target.id)!.passwordHash;
-      assert.notEqual(encoded, secret);
-      assert.equal(JSON.stringify(state).includes(secret), false);
-      assert.equal(JSON.stringify(state).includes(String(encoded)), false);
-      const edit = {
-        ...target,
-        active: true,
-        canUpdateStock: true,
-        password: '',
-        confirm: '',
-      };
-      assert.equal((await request('user.update', edit)).response.status, 200);
-      assert.equal(
-        sqlite
-          .prepare('SELECT passwordHash FROM users WHERE id=?')
-          .get(target.id)!.passwordHash,
-        encoded,
-      );
-      const login = await request('login', {
-        email: data.email,
-        password: secret,
-      });
-      assert.equal(login.response.status, 200);
-      const targetCookie = login.response.headers
-        .get('set-cookie')!
-        .split(';')[0];
-      if (role === 'collaborator') {
-        cookie = targetCookie;
-        csrf = login.body.csrf as string;
-        assert.equal(
-          (
-            await request('user.create', {
-              ...data,
-              email: 'denied@example.test',
-            })
-          ).response.status,
-          403,
-        );
-        assert.equal(
-          (
-            await request('user.update', {
-              ...edit,
-              password: secret,
-              confirm: secret,
-            })
-          ).response.status,
-          403,
-        );
-        assert.deepEqual(
-          ((await request()).body as unknown as State).users,
-          [],
-        );
-        cookie = adminCookie;
-        csrf = adminCsrf;
-      }
-      // Also covers accounts previously saved without a password.
-      sqlite
-        .prepare('UPDATE users SET passwordHash=NULL WHERE id=?')
-        .run(target.id);
-      sqlite
-        .prepare(
-          'INSERT INTO passwordResetTokens (hash,userId,expiresAt,kind) VALUES (?,?,?,?)',
-        )
-        .run(await digest(secret), target.id, Date.now() + 60000, 'invite');
-      const next = password();
-      assert.equal(
-        (
-          await request('user.update', {
-            ...edit,
-            password: next,
-            confirm: next,
-          })
-        ).response.status,
-        200,
-      );
-      assert.equal(
-        sqlite
-          .prepare('SELECT COUNT(*) n FROM sessions WHERE userId=?')
-          .get(target.id)!.n,
-        0,
-      );
-      assert.equal(
-        sqlite
-          .prepare('SELECT COUNT(*) n FROM passwordResetTokens WHERE userId=?')
-          .get(target.id)!.n,
-        0,
-      );
-      assert.equal(
-        (await request('login', { email: data.email, password: secret }))
-          .response.status,
-        401,
-      );
-      assert.equal(
-        (await request('login', { email: data.email, password: next })).response
-          .status,
-        200,
-      );
-      const audits = JSON.stringify(
-        sqlite.prepare('SELECT * FROM auditLogs').all(),
-      );
-      assert.equal(audits.includes(secret), false);
-      assert.equal(audits.includes(next), false);
-      assert.equal(audits.includes(String(encoded)), false);
-    }
-  } finally {
-    sqlite.close();
-  }
-});
 void test('classification boundaries, manual overrides and non-negative purchase suggestions', () => {
   const p = { quantity: 2, minimum: 2, ideal: 5, manualStatus: null };
   assert.equal(classify(p), 'critical');
@@ -243,6 +69,7 @@ void test('real backend: setup, CSRF, RBAC, audit, concurrency, shopping, import
   const delivered: { to: string; link: string }[] = [];
   const config = {
     APP_URL: 'https://repor.test',
+    EMAIL_TEST_MODE: 'false',
     sendMail: async (to: string, link: string) => {
       delivered.push({ to, link });
     },
@@ -472,17 +299,20 @@ void test('real backend: setup, CSRF, RBAC, audit, concurrency, shopping, import
         name: 'Colaborador de teste',
         email: userEmail,
         job: 'Equipe',
+        phone: '11999999999',
         role: 'collaborator',
       })
     ).response.status,
     200,
   );
   assert.equal(delivered.length, 1);
-  const inviteToken = new URL(delivered[0].link).hash.slice(7);
+  const inviteToken = new URLSearchParams(
+    new URL(delivered[0].link).hash.slice(1),
+  ).get('activate')!;
   const collaboratorPassword = password();
   assert.equal(
     (
-      await request('reset', {
+      await request('activate', {
         token: inviteToken,
         password: collaboratorPassword,
         confirm: collaboratorPassword,
@@ -492,7 +322,7 @@ void test('real backend: setup, CSRF, RBAC, audit, concurrency, shopping, import
   );
   assert.equal(
     (
-      await request('reset', {
+      await request('activate', {
         token: inviteToken,
         password: collaboratorPassword,
         confirm: collaboratorPassword,

@@ -16,7 +16,7 @@ Esta versão usa Next.js 16 na Vercel e SQLite remoto no Turso. O código está 
 1. Importe este repositório na Vercel usando o preset Next.js e Node 24.
 2. Conecte um banco Turso pelo Marketplace. Configure `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN`.
 3. Na primeira publicação, configure o segredo temporário `REPOR_BOOTSTRAP_ADMIN` com um JSON contendo `id`, `name`, `email` e `passwordHash` bcrypt. Ele inicializa o administrador antes de abrir a aplicação. Não use senha em texto nesse campo.
-4. Publique. O comando de build aplica as migrations de `drizzle/` e compila a aplicação. Migrations aplicadas são verificadas por checksum; não edite arquivos já aplicados.
+4. Antes de publicar, execute o backup verificável e a migração explícita conforme [o guia de convites](docs/convites-resend.md). O build somente compila: nunca migra bancos. Migrations aplicadas são verificadas por checksum; não edite arquivos já aplicados.
 5. Remova `REPOR_BOOTSTRAP_ADMIN` após a primeira publicação. As próximas usam o cadastro persistido.
 
 Esta instalação tem banco separado da antiga hospedagem Sites. Os produtos e movimentações antigos não são importados automaticamente. O administrador inicial pode manter o cadastro existente por transferência segura do hash, sem expor a senha.
@@ -36,7 +36,7 @@ npm run build
 
 Os testes usam bancos temporários e não alteram o banco online. Cobrem autenticação, permissões, CSRF, estoque, compras, exportação/importação, recuperação e transações do adaptador Turso.
 
-`APP_URL`, `EMAIL_API_KEY`, `EMAIL_FROM` e `EMAIL_API_URL` são opcionais para o envio de convites e recuperação por e-mail. Sem provedor configurado, o administrador pode criar usuários e definir suas senhas pela tela Usuários.
+O administrador cadastra contas pendentes; cada pessoa define sua própria senha pelo convite. Veja [configuração do Resend, preview isolado e migrações](docs/convites-resend.md). Sem e-mail configurado, o cadastro permanece pendente e o sistema informa a falha de envio.
 
 ## Acesso
 

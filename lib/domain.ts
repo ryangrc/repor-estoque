@@ -7,6 +7,8 @@ export interface User {
   role: Role;
   active: number;
   job: string;
+  phone: string;
+  status: 'pending' | 'active' | 'blocked';
   canUpdateStock: number;
   createdAt: string;
 }
@@ -77,6 +79,8 @@ export interface State {
   audits: Audit[];
   users: User[];
   emailConfigured: boolean;
+  emailTestMode?: boolean;
+  emailTestRecipient?: string;
 }
 export const statusLabels = {
   critical: 'Crítico',

@@ -7,7 +7,7 @@ import { handle } from '../server/api';
 import { guard, query } from '../server/database';
 import { shoppingAction } from '../server/shopping';
 
-test('Turso adapter preserves login, session reads and atomic rollback', async () => {
+void test('Turso adapter preserves login, session reads and atomic rollback', async () => {
   const client = createClient({ url: 'file::memory:' });
   try {
     for (const file of readdirSync('drizzle')

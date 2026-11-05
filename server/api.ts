@@ -1,3 +1,4 @@
+import { testMode } from './mail';
 import { AppError, ensure, object, text, type Product } from '../lib/domain';
 import { all, audit, query, type Database } from './database';
 import {
@@ -63,6 +64,9 @@ export async function handle(req: Request, db: Database, c: Config) {
           auth.user.role === 'admin'
             ? await all(db, `SELECT ${publicUser} FROM users ORDER BY name`)
             : [],
+        emailTestMode: testMode(c),
+        emailTestRecipient:
+          auth.user.role === 'admin' ? c.EMAIL_TEST_RECIPIENT : undefined,
         emailConfigured: auth.user.role === 'admin' ? mailConfigured(c) : false,
       });
     }
@@ -88,10 +92,20 @@ export async function handle(req: Request, db: Database, c: Config) {
     }
     const b = object(decoded);
     const action = text(b.action, 'Ação', 60);
-    if (['setup', 'login', 'forgot', 'reset'].includes(action)) {
+    if (
+      [
+        'setup',
+        'login',
+        'forgot',
+        'reset',
+        'activate',
+        'activation.check',
+      ].includes(action)
+    ) {
       const result = await authAction(db, c, req, action, b);
       if (result) {
-        if (result.cookie) headers['Set-Cookie'] = result.cookie;
+        if ('cookie' in result && result.cookie)
+          headers['Set-Cookie'] = result.cookie;
         return respond(result.body);
       }
     }
@@ -121,7 +135,8 @@ export async function handle(req: Request, db: Database, c: Config) {
       return respond({ ok: true });
     const shopping = await shoppingAction(db, user, action, b);
     if (shopping) return respond(shopping);
-    if (await usersAction(db, c, user, action, b)) return respond({ ok: true });
+    const usersResult = await usersAction(db, c, user, action, b);
+    if (usersResult) return respond(usersResult);
     throw new AppError(404, 'Ação não encontrada.');
   } catch (error) {
     if (error instanceof AppError)
@@ -138,7 +153,6 @@ export async function handle(req: Request, db: Database, c: Config) {
     return respond({ error: 'Não foi possível concluir esta operação.' }, 500);
   }
 }
-
 async function boundedBody(req: Request) {
   ensure(req.body, 'Corpo JSON obrigatório.');
   const reader = req.body.getReader(),

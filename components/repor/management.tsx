@@ -156,9 +156,16 @@ export function Management({
         {!state.emailConfigured && (
           <p className="info">
             <CircleAlert size={18} />
-            Você já pode criar usuários com senha ou definir uma nova senha em
-            Editar usuário. A recuperação por e-mail estará disponível após
-            configurar o serviço de e-mail.
+            O envio de e-mails não está configurado. Novas contas ficarão
+            pendentes até o envio e a ativação do convite.
+          </p>
+        )}
+        {state.emailTestMode && (
+          <p className="info">
+            Modo de testes: envios restritos a{' '}
+            {state.emailTestRecipient ||
+              'um destinatário ainda não configurado'}
+            . Esta instalação atende uma única empresa.
           </p>
         )}
         <section className="panel user-list">
@@ -172,15 +179,22 @@ export function Management({
                 </strong>
                 <p>{u.email}</p>
                 <small>
+                  {u.phone || 'Sem telefone informado'} ·{' '}
                   {u.job || 'Sem cargo informado'} · Cadastro em{' '}
                   {date(u.createdAt)}
                 </small>
               </div>
               <span className="role-label">
-                {u.role === 'admin' ? 'Administrador' : 'Colaborador'}
+                {u.role === 'admin' ? 'Administrador' : 'Operador'}
               </span>
-              <span className={`status ${u.active ? 'ok' : 'critical'}`}>
-                {u.active ? 'Ativo' : 'Inativo'}
+              <span
+                className={`status ${u.status === 'active' ? 'ok' : u.status === 'pending' ? 'warning' : 'critical'}`}
+              >
+                {u.status === 'blocked'
+                  ? 'Bloqueado'
+                  : u.status === 'pending'
+                    ? 'Pendente de ativação'
+                    : 'Ativo'}
               </span>
               {u.id !== state.user.id && (
                 <div className="row-actions">
@@ -192,7 +206,7 @@ export function Management({
                   </button>
                   <button
                     title="Reenviar convite"
-                    disabled={!state.emailConfigured || !u.active}
+                    disabled={!state.emailConfigured || u.status !== 'pending'}
                     aria-label={`Reenviar convite para ${u.name}`}
                     onClick={() =>
                       quick('user.resend', { id: u.id }, 'Convite reenviado.')

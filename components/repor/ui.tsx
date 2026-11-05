@@ -192,12 +192,14 @@ export function Field({
 export function Submit({
   busy,
   label = 'Salvar alterações',
+  disabled = false,
 }: {
   busy: boolean;
+  disabled?: boolean;
   label?: string;
 }) {
   return (
-    <button type="submit" disabled={busy} className="btn primary">
+    <button type="submit" disabled={busy || disabled} className="btn primary">
       {busy ? <LoaderCircle className="spin" size={17} /> : null}
       {busy ? 'Salvando…' : label}
       {!busy && <ArrowRight size={17} />}
