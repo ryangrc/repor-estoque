@@ -1,0 +1,6 @@
+.qa/
+.env*
+outputs/
+work/
+*.sqlite
+*.sqlite.json
